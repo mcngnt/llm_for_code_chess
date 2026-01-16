@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+src/chess_challenge.egg-info/PKG-INFO
+src/chess_challenge.egg-info/SOURCES.txt
+src/chess_challenge.egg-info/dependency_links.txt
+src/chess_challenge.egg-info/entry_points.txt
+src/chess_challenge.egg-info/requires.txt
+src/chess_challenge.egg-info/top_level.txt
