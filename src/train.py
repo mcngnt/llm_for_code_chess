@@ -32,19 +32,19 @@ def parse_args():
     
     # Model arguments
     parser.add_argument(
-        "--vocab_size", type=int, default=1200,
+        "--vocab_size", type=int, default=80,
         help="Vocabulary size"
     )
     parser.add_argument(
-        "--n_embd", type=int, default=128,
+        "--n_embd", type=int, default=136,
         help="Embedding dimension"
     )
     parser.add_argument(
-        "--n_layer", type=int, default=4,
+        "--n_layer", type=int, default=5,
         help="Number of transformer layers"
     )
     parser.add_argument(
-        "--n_head", type=int, default=4,
+        "--n_head", type=int, default=8,
         help="Number of attention heads"
     )
     parser.add_argument(
@@ -142,12 +142,13 @@ def main():
     
     # Build tokenizer from dataset
     print("\nBuilding tokenizer from dataset...")
-    tokenizer = ChessTokenizer.build_vocab_from_dataset(
-        dataset_name=args.dataset_name,
-        min_frequency=500,  # Only keep moves that appear at least 500 times
-        max_samples=100000,  # Use 100k games to build vocabulary
-    )
+    tokenizer = ChessTokenizer()
     print(f"   Vocabulary size: {tokenizer.vocab_size}")
+    
+    sample_text = "WPe2e4 BNg8f6 WQd1f3(x)"
+    print(f"Original Text : '{sample_text}'\n")
+    tokens = tokenizer.tokenize(sample_text)
+    print(f"Tokens :  {tokens}")
     
     # Use the vocab size from tokenizer (override args if provided)
     actual_vocab_size = tokenizer.vocab_size

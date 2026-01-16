@@ -25,14 +25,7 @@ class ChessTokenizer(PreTrainedTokenizer):
     """
     A custom tokenizer for chess moves using extended UCI notation.
     
-    This tokenizer maps each possible chess move to a unique token ID.
-    The vocabulary is built from the training dataset to ensure all moves
-    encountered during training have a corresponding token.
-    
-    Example:
-        >>> tokenizer = ChessTokenizer()
-        >>> tokenizer.encode("WPe2e4 BPe7e5")
-        [1, 42, 87, 2]  # [BOS, e2e4, e7e5, EOS]
+
     """
     
     model_input_names = ["input_ids", "attention_mask"]
@@ -80,7 +73,7 @@ class ChessTokenizer(PreTrainedTokenizer):
         else:
             # Create a minimal vocabulary with just special tokens
             # The full vocabulary should be built from the dataset
-            self._vocab = self._create_default_vocab()
+            self._vocab = self._create_fixed_vocab()
         
         # Create reverse mapping
         self._ids_to_tokens = {v: k for k, v in self._vocab.items()}
@@ -94,90 +87,28 @@ class ChessTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
     
-    def _create_default_vocab(self) -> Dict[str, int]:
-        """
-        Create a minimal default vocabulary with just special tokens.
+    def _create_fixed_vocab(self) -> Dict[str, int]:
+
+        vocab_list = [self.PAD_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN, self.UNK_TOKEN]
         
-        For the full vocabulary, use `build_vocab_from_dataset()`.
-        This minimal vocab is just a placeholder - you should build from data.
-        """
-        special_tokens = [self.PAD_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN, self.UNK_TOKEN]
-        vocab = {token: idx for idx, token in enumerate(special_tokens)}
-        return vocab
+        # Colors
+        vocab_list.extend(["W", "B"])
+        
+        # Pieces
+        vocab_list.extend(["P", "N", "B", "R", "Q", "K"])
+        
+        # 3. Squares
+        files = "abcdefgh"
+        ranks = "12345678"
+        squares = [f"{f}{r}" for f in files for r in ranks]
+        vocab_list.extend(sorted(squares))
+        
+        # Suffixes
+        suffixes = ["(x)", "(+)", "(+*)", "(o)", "(O)", "(Q)"]
+        vocab_list.extend(suffixes)
+        
+        return {token: idx for idx, token in enumerate(vocab_list)}
     
-    @classmethod
-    def build_vocab_from_iterator(
-        cls,
-        iterator,
-        min_frequency: int = 1,
-    ) -> "ChessTokenizer":
-        """
-        Build a tokenizer vocabulary from an iterator of game strings.
-        
-        Args:
-            iterator: An iterator yielding game strings (space-separated moves).
-            min_frequency: Minimum frequency for a token to be included.
-        
-        Returns:
-            A ChessTokenizer with the built vocabulary.
-        """
-        from collections import Counter
-        
-        token_counts = Counter()
-        
-        for game in iterator:
-            moves = game.strip().split()
-            token_counts.update(moves)
-        
-        # Filter by frequency
-        tokens = [
-            token for token, count in token_counts.items()
-            if count >= min_frequency
-        ]
-        
-        # Sort for reproducibility
-        tokens = sorted(tokens)
-        
-        # Build vocabulary
-        special_tokens = [cls.PAD_TOKEN, cls.BOS_TOKEN, cls.EOS_TOKEN, cls.UNK_TOKEN]
-        vocab = {token: idx for idx, token in enumerate(special_tokens + tokens)}
-        
-        return cls(vocab=vocab)
-    
-    @classmethod
-    def build_vocab_from_dataset(
-        cls,
-        dataset_name: str = "dlouapre/lichess_2025-01_1M",
-        split: str = "train",
-        column: str = "text",
-        min_frequency: int = 500,
-        max_samples: Optional[int] = 100000,
-    ) -> "ChessTokenizer":
-        """
-        Build a tokenizer vocabulary from a Hugging Face dataset.
-        
-        Args:
-            dataset_name: Name of the dataset on Hugging Face Hub.
-            split: Dataset split to use.
-            column: Column containing the game strings.
-            min_frequency: Minimum frequency for a token to be included (default: 500).
-            max_samples: Maximum number of samples to process (default: 100k).
-        
-        Returns:
-            A ChessTokenizer with the built vocabulary.
-        """
-        from datasets import load_dataset
-        
-        dataset = load_dataset(dataset_name, split=split)
-        
-        if max_samples is not None:
-            dataset = dataset.select(range(min(max_samples, len(dataset))))
-        
-        def game_iterator():
-            for example in dataset:
-                yield example[column]
-        
-        return cls.build_vocab_from_iterator(game_iterator(), min_frequency=min_frequency)
     
     @property
     def vocab_size(self) -> int:
@@ -190,15 +121,35 @@ class ChessTokenizer(PreTrainedTokenizer):
     
     def _tokenize(self, text: str) -> List[str]:
         """
-        Tokenize a string of moves into a list of tokens.
+        Tokenize a string of moves into atomic components.
         
-        Args:
-            text: A string of space-separated moves.
-        
-        Returns:
-            List of move tokens.
+        Input: "WPe2e4 BNg8f6"
+        Output: ['W', 'P', 'e2', 'e4', 'B', 'N', 'g8', 'f6']
         """
-        return text.strip().split()
+        import re
+        tokens = []
+        moves = text.strip().split()
+        
+        pattern = re.compile(r"^([WB])([PNBRQK])([a-h][1-8])([a-h][1-8])(.*)$")
+        
+        for move in moves:
+            match = pattern.match(move)
+            if match:
+
+                tokens.extend([
+                    match.group(1),  # Color
+                    match.group(2),  # Piece
+                    match.group(3),  # Source
+                    match.group(4)  # Dest
+                ])
+                # Suffix
+                suffix = match.group(5)
+                if suffix:
+                    tokens.append(suffix)
+            else:
+                tokens.append(self.UNK_TOKEN)
+                
+        return tokens
     
     def _convert_token_to_id(self, token: str) -> int:
         """Convert a token to its ID."""
