@@ -90,6 +90,9 @@ class ChessTokenizer(PreTrainedTokenizer):
     def _create_fixed_vocab(self) -> Dict[str, int]:
 
         vocab_list = [self.PAD_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN, self.UNK_TOKEN]
+
+        # Separate moves
+        vocab_list.append(" ")
         
         # Colors
         vocab_list.extend(["W", "B"])
@@ -102,10 +105,13 @@ class ChessTokenizer(PreTrainedTokenizer):
         ranks = "12345678"
         squares = [f"{f}{r}" for f in files for r in ranks]
         vocab_list.extend(sorted(squares))
-        
+
         # Suffixes
-        suffixes = ["(x)", "(+)", "(+*)", "(o)", "(O)", "(Q)"]
+        suffixes = ["(x)", "(+)", "(+*)", "(o)", "(O)", "(Q)", "(K)", "(x*)", "(x+*)"]
         vocab_list.extend(suffixes)
+
+        vocab_list = list(dict.fromkeys(vocab_list))
+        
         
         return {token: idx for idx, token in enumerate(vocab_list)}
     
@@ -122,9 +128,6 @@ class ChessTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str) -> List[str]:
         """
         Tokenize a string of moves into atomic components.
-        
-        Input: "WPe2e4 BNg8f6"
-        Output: ['W', 'P', 'e2', 'e4', 'B', 'N', 'g8', 'f6']
         """
         import re
         tokens = []
@@ -135,17 +138,10 @@ class ChessTokenizer(PreTrainedTokenizer):
         for move in moves:
             match = pattern.match(move)
             if match:
-
-                tokens.extend([
-                    match.group(1),  # Color
-                    match.group(2),  # Piece
-                    match.group(3),  # Source
-                    match.group(4)  # Dest
-                ])
-                # Suffix
-                suffix = match.group(5)
-                if suffix:
-                    tokens.append(suffix)
+                for i in range(1,6):
+                    if  match.group(i) in self._vocab:
+                        tokens.append(match.group(i))
+                tokens.append(' ')
             else:
                 tokens.append(self.UNK_TOKEN)
                 
@@ -160,10 +156,8 @@ class ChessTokenizer(PreTrainedTokenizer):
         return self._ids_to_tokens.get(index, self.UNK_TOKEN)
     
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Convert a list of tokens back to a string."""
-        # Filter out special tokens for cleaner output
         special = {self.PAD_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN, self.UNK_TOKEN}
-        return " ".join(t for t in tokens if t not in special)
+        return "".join(t for t in tokens if t not in special)
     
     def save_vocabulary(
         self,
@@ -194,36 +188,3 @@ class ChessTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-def count_vocab_from_dataset(
-    dataset_name: str = "dlouapre/lichess_2025-01_1M",
-    split: str = "train",
-    column: str = "text",
-    max_samples: Optional[int] = 10000,
-) -> Dict[str, int]:
-    """
-    Count token frequencies in a dataset (useful for vocabulary analysis).
-    
-    Args:
-        dataset_name: Name of the dataset on Hugging Face Hub.
-        split: Dataset split to use.
-        column: Column containing the game strings.
-        max_samples: Maximum number of samples to process.
-    
-    Returns:
-        Dictionary mapping tokens to their frequencies.
-    """
-    from collections import Counter
-    from datasets import load_dataset
-    
-    dataset = load_dataset(dataset_name, split=split)
-    
-    if max_samples is not None:
-        dataset = dataset.select(range(min(max_samples, len(dataset))))
-    
-    token_counts = Counter()
-    
-    for example in dataset:
-        moves = example[column].strip().split()
-        token_counts.update(moves)
-    
-    return dict(token_counts)

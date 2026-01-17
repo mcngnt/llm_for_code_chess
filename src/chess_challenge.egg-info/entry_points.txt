@@ -1,3 +1,0 @@
-[console_scripts]
-chess-eval = src.evaluate:main
-chess-train = src.train:main

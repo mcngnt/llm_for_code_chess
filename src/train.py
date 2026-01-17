@@ -60,7 +60,7 @@ def parse_args():
         help="Dropout probability"
     )
     parser.add_argument(
-        "--no_tie_weights", action="store_true",
+        "--no_tie_weights", action="store_false",
         help="Disable weight tying between embedding and output layers"
     )
     
